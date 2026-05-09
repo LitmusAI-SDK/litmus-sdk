@@ -1,0 +1,21 @@
+[project]
+id = "simple-agent"
+name = "Simple Agent Demo"
+description = "Basic Litmus SDK example for direct litellm calls"
+
+[agent]
+entrypoint = "agent:my_agent"
+
+[storage]
+
+[settings]
+model = "gpt-4o-mini"
+temperature = 0.0
+
+[[golden_tests]]
+name = "capital_city"
+expected_pattern = "Paris"
+expected_behavior = "Should return Paris for France capital question"
+
+[golden_tests.inputs]
+question = "What is the capital of France?"

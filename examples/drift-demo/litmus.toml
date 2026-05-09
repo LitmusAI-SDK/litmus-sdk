@@ -1,0 +1,60 @@
+[project]
+id = "drift-demo"
+name = "Drift Demo"
+description = "Prompt drift comparison example (v3)"
+
+[agent]
+entrypoint = "agent:generate_answer"
+
+[storage]
+
+[settings]
+model = "gpt-4o-mini"
+
+[[golden_tests]]
+name = "capital_city"
+expected_pattern = "Paris"
+expected_behavior = "Should state Paris as the capital of France"
+
+[golden_tests.inputs]
+question = "What is the capital of France?"
+
+[[golden_tests]]
+name = "math_basic"
+expected_pattern = "56"
+expected_behavior = "Should return only the number 56"
+
+[golden_tests.inputs]
+question = "What is 7 * 8? Reply with just the number."
+
+[[golden_tests]]
+name = "reasoning"
+expected_pattern = "(?i)\\byes\\b"
+expected_behavior = "Should answer yes using basic syllogistic reasoning"
+
+[golden_tests.inputs]
+question = "If all cats are mammals and all mammals are animals, is a cat an animal? Answer yes or no."
+
+[[golden_tests]]
+name = "negation"
+expected_pattern = "(?i)\\bno\\b"
+expected_behavior = "Should correctly answer no — the Earth is not flat"
+
+[golden_tests.inputs]
+question = "Is the Earth flat? Answer yes or no."
+
+[[golden_tests]]
+name = "sqrt_numeric"
+expected_pattern = "\\b12\\b"
+expected_behavior = "Should return the number 12"
+
+[golden_tests.inputs]
+question = "What is the square root of 144? Reply with just the number."
+
+[[golden_tests]]
+name = "list_planets"
+expected_pattern = "(?i)(mercury|venus|earth|mars|jupiter|saturn|uranus|neptune)"
+expected_behavior = "Should list 3 valid planet names from our solar system"
+
+[golden_tests.inputs]
+question = "Name exactly 3 planets in our solar system."
