@@ -600,6 +600,91 @@ class LitmusStorage:
         return dict(row) if row else None
 
     # ------------------------------------------------------------------
+    # Judge verdicts
+    # ------------------------------------------------------------------
+
+    def store_judge_verdict(
+        self,
+        version_a: str,
+        version_b: str,
+        verdict: Any,  # JudgeVerdict — typed as Any to avoid circular import
+        project_id: Optional[str] = None,
+    ) -> None:
+        try:
+            self.conn.execute(
+                """
+                INSERT INTO judge_verdicts
+                    (project_id, version_a, version_b, test_name, verdict, confidence, score,
+                     reasoning, output_a_sample, output_b_sample, expected_behavior,
+                     judge_model, judge_tokens_input, judge_tokens_output, judge_cost,
+                     judge_latency_ms, timestamp, error)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    project_id or "",
+                    version_a,
+                    version_b,
+                    verdict.test_name,
+                    verdict.verdict,
+                    verdict.confidence,
+                    verdict.score,
+                    verdict.reasoning,
+                    verdict.output_a_sample,
+                    verdict.output_b_sample,
+                    verdict.expected_behavior,
+                    verdict.judge_model,
+                    verdict.judge_tokens_input,
+                    verdict.judge_tokens_output,
+                    verdict.judge_cost,
+                    verdict.judge_latency_ms,
+                    verdict.timestamp.isoformat(),
+                    verdict.error,
+                ),
+            )
+            self.conn.commit()
+        except Exception as exc:
+            print(f"[Litmus] Error storing judge verdict: {exc}")
+
+    def get_judge_verdicts(
+        self,
+        version_a: str,
+        version_b: str,
+        project_id: Optional[str] = None,
+    ) -> List[Any]:
+        from litmus_sdk.testing.models import JudgeVerdict
+
+        rows = self.conn.execute(
+            """
+            SELECT * FROM judge_verdicts
+            WHERE version_a = ? AND version_b = ?
+              AND (? IS NULL OR project_id = ?)
+            ORDER BY timestamp DESC
+            """,
+            (version_a, version_b, project_id, project_id),
+        ).fetchall()
+
+        verdicts = []
+        for r in rows:
+            verdicts.append(JudgeVerdict(
+                test_name=r["test_name"],
+                verdict=r["verdict"],
+                confidence=r["confidence"] or 0.0,
+                score=r["score"] or 0.5,
+                reasoning=r["reasoning"] or "",
+                output_a_sample=r["output_a_sample"] or "",
+                output_b_sample=r["output_b_sample"] or "",
+                expected_behavior=r["expected_behavior"] or "",
+                judge_model=r["judge_model"] or "",
+                judge_tokens_input=r["judge_tokens_input"] or 0,
+                judge_tokens_output=r["judge_tokens_output"] or 0,
+                judge_cost=r["judge_cost"] or 0.0,
+                judge_latency_ms=r["judge_latency_ms"] or 0.0,
+                timestamp=datetime.fromisoformat(r["timestamp"]),
+                error=r["error"],
+            ))
+        return verdicts
+
+    # ------------------------------------------------------------------
     # Housekeeping
     # ------------------------------------------------------------------
 

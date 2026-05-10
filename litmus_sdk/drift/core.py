@@ -19,7 +19,7 @@ Recommendation = SAFE / REVIEW / WARNING / REGRESSION (see classify_drift).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 
 import numpy as np
 
@@ -67,7 +67,13 @@ class DriftDetector:
     # Public API
     # ------------------------------------------------------------------
 
-    def compare(self, version_a: str, version_b: str) -> DriftReport:
+    def compare(
+        self,
+        version_a: str,
+        version_b: str,
+        judge: bool = False,
+        judge_config: Optional[object] = None,
+    ) -> DriftReport:
         """
         Compare version_a (baseline) with version_b (candidate).
 
@@ -84,6 +90,7 @@ class DriftDetector:
                - stability_a/b = within-version output consistency
           4. Aggregate: global averages of per-test drifts / stabilities.
           5. Classify → SAFE / REVIEW / WARNING / REGRESSION.
+          6. Optionally run LLM-as-a-judge if judge=True.
         """
         traces_a = self.sdk.get_traces(version_a)
         traces_b = self.sdk.get_traces(version_b)
@@ -169,7 +176,7 @@ class DriftDetector:
 
         recommendation, details = classify_drift(avg_output_drift, global_stab_b, self.config)
 
-        return DriftReport(
+        report = DriftReport(
             version_a=version_a,
             version_b=version_b,
             avg_input_drift=round(avg_input_drift, 6),
@@ -181,6 +188,38 @@ class DriftDetector:
             recommendation=recommendation,
             details=details,
         )
+
+        if judge:
+            from litmus_sdk.judge import JudgeConfig, run_judge
+
+            cfg = judge_config if judge_config is not None else JudgeConfig()
+            judge_report = run_judge(self.sdk, per_test, version_a, version_b, cfg)
+            report.judge_report = judge_report
+
+            # Build judge-specific recommendation string
+            verdict = judge_report.summary_verdict
+            if verdict == "REGRESSION":
+                report.judge_recommendation = (
+                    f"Judge flagged REGRESSION ({judge_report.regression_count} tests worse)"
+                )
+            elif verdict == "IMPROVEMENT":
+                report.judge_recommendation = (
+                    f"Judge flagged IMPROVEMENT ({judge_report.improvement_count} tests better)"
+                )
+            elif verdict == "INCONCLUSIVE":
+                report.judge_recommendation = "Judge verdict INCONCLUSIVE — not enough signal"
+            else:
+                report.judge_recommendation = "Judge found no significant behavioral change (NEUTRAL)"
+
+            # final_recommendation combines drift + judge signals
+            if verdict == "REGRESSION":
+                report.final_recommendation = "REGRESSION"
+            elif verdict == "IMPROVEMENT" and recommendation in ("SAFE", "REVIEW"):
+                report.final_recommendation = "IMPROVEMENT"
+            else:
+                report.final_recommendation = recommendation
+
+        return report
 
     # ------------------------------------------------------------------
     # Embedding backfill

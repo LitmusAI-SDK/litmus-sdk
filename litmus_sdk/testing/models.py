@@ -310,6 +310,41 @@ class TestReport:
 # ---------------------------------------------------------------------------
 
 @dataclass
+class JudgeVerdict:
+    """LLM-as-judge verdict for a single test case comparison."""
+    test_name: str
+    verdict: str           # IMPROVEMENT | NEUTRAL | REGRESSION | INCONCLUSIVE
+    confidence: float      # 0.0 – 1.0
+    score: float           # 1.0=improvement, 0.5=neutral, 0.0=regression
+    reasoning: str
+    output_a_sample: str
+    output_b_sample: str
+    expected_behavior: str
+    judge_model: str
+    judge_tokens_input: int
+    judge_tokens_output: int
+    judge_cost: float
+    judge_latency_ms: float
+    timestamp: datetime
+    error: Optional[str] = None
+
+
+@dataclass
+class JudgeReport:
+    """Aggregate LLM-as-judge report across all judged tests."""
+    version_a: str
+    version_b: str
+    verdicts: Dict[str, "JudgeVerdict"]
+    summary_verdict: str
+    improvement_count: int
+    neutral_count: int
+    regression_count: int
+    inconclusive_count: int
+    total_judge_cost: float
+    total_judge_latency_ms: float
+
+
+@dataclass
 class TestDriftResult:
     """Per-test-case drift breakdown between two versions."""
     test_name: str
@@ -320,6 +355,7 @@ class TestDriftResult:
     num_runs_a: int
     num_runs_b: int
     flagged: bool         # output_drift > threshold
+    judge_verdict: Optional["JudgeVerdict"] = None
 
 
 @dataclass
@@ -349,6 +385,9 @@ class DriftReport:
     flagged_tests: List[str]
     recommendation: str
     details: str = ""
+    judge_report: Optional["JudgeReport"] = None
+    judge_recommendation: Optional[str] = None
+    final_recommendation: Optional[str] = None
 
     def display(self) -> None:
         """Print a formatted drift summary to stdout."""

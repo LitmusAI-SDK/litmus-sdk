@@ -116,6 +116,30 @@ CREATE TABLE IF NOT EXISTS run_queue (
 );
 CREATE INDEX IF NOT EXISTS idx_run_queue_project_id ON run_queue(project_id);
 CREATE INDEX IF NOT EXISTS idx_run_queue_status     ON run_queue(status);
+
+CREATE TABLE IF NOT EXISTS judge_verdicts (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id          TEXT NOT NULL,
+    version_a           TEXT NOT NULL,
+    version_b           TEXT NOT NULL,
+    test_name           TEXT NOT NULL,
+    verdict             TEXT NOT NULL,
+    confidence          REAL NOT NULL DEFAULT 0.0,
+    score               REAL NOT NULL DEFAULT 0.5,
+    reasoning           TEXT,
+    output_a_sample     TEXT,
+    output_b_sample     TEXT,
+    expected_behavior   TEXT,
+    judge_model         TEXT,
+    judge_tokens_input  INTEGER DEFAULT 0,
+    judge_tokens_output INTEGER DEFAULT 0,
+    judge_cost          REAL DEFAULT 0.0,
+    judge_latency_ms    REAL DEFAULT 0.0,
+    timestamp           TEXT NOT NULL DEFAULT (datetime('now')),
+    error               TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_judge_verdicts_versions
+    ON judge_verdicts(project_id, version_a, version_b);
 """
 
 

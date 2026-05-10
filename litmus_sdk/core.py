@@ -280,6 +280,8 @@ class LitmusSDK:
         version_a: str,
         version_b: str,
         drift_threshold: float = 0.10,
+        judge: bool = False,
+        judge_config=None,
     ) -> DriftReport:
         """
         Compare two versions using embedding-space drift.
@@ -292,16 +294,20 @@ class LitmusSDK:
             version_b:       New version string.
             drift_threshold: Cosine distance above which individual test cases
                              are flagged.  Default 0.10.
+            judge:           When True, run an LLM-as-a-judge evaluation on
+                             flagged (or all) tests after drift computation.
+            judge_config:    Optional JudgeConfig instance.  Defaults to
+                             JudgeConfig() with gpt-4o-mini and flagged_only mode.
 
         Returns:
             DriftReport with prompt_drift, output_drift, stability scores,
-            flagged tests, and a recommendation string.
+            flagged tests, recommendation, and (if judge=True) judge_report.
         """
         # Lazy import to avoid circular dependency at module load time
         from litmus_sdk.drift import DriftDetector
 
         detector = DriftDetector(self, drift_threshold=drift_threshold)
-        return detector.compare(version_a, version_b)
+        return detector.compare(version_a, version_b, judge=judge, judge_config=judge_config)
 
     # ------------------------------------------------------------------
     # Context manager support
