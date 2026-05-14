@@ -13,7 +13,7 @@ Usage (two lines to instrument any agent):
     # library that ultimately calls the OpenAI SDK.
 
 Advanced:
-    litmus = LitmusSDK(db_path="/path/to/litmus.db", chroma_path="/path/to/chroma")
+    litmus = LitmusSDK(project_id="my-project", litmus_url="http://localhost:8000")
     litmus.init(version="v1.1.0")
 
     drift = litmus.compare("v1.0.0", "v1.1.0")
@@ -48,27 +48,18 @@ class LitmusSDK:
 
     def __init__(
         self,
-        db_path: Optional[str] = None,
-        chroma_path: Optional[str] = None,
         project_id: Optional[str] = None,
+        litmus_url: Optional[str] = None,
         config_path: Optional[str] = None,
     ) -> None:
         """
         Create a LitmusSDK instance.
 
+        The SDK is now a pure HTTP client. It does not open SQLite or ChromaDB — persistence lives entirely in the Litmus backend.
+
         Args:
-            db_path:    Path to the SQLite database file.  If omitted, uses
-                        ``LITMUS_DB_PATH`` env var, then ``litmus.toml``, then
-                        ``./litmus.db`` in the current working directory.
-            chroma_path: Directory where ChromaDB stores vectors.  Defaults to
-                        ``LITMUS_CHROMA_PATH`` env var or ``litmus.toml``.
-                        Otherwise falls back to a ``chroma/`` folder next to
-                        the SQLite file.
-                        Pass ``None`` to let LitmusStorage pick the default.
-            project_id: Unique identifier for this project.  All traces,
-                        test runs, and drift comparisons are scoped to this
-                        project.  If ``None``, uses ``LITMUS_PROJECT_ID`` env,
-                        then ``litmus.toml``, then a UUID.
+            project_id: Unique identifier for this project. All traces, test runs, and drift comparisons are scoped to this project. If ``None``, uses ``LITMUS_PROJECT_ID`` env, then ``litmus.toml``'s ``[project] id``, then a fresh UUID.
+            litmus_url: Base URL of the Litmus backend. Falls back to ``LITMUS_URL`` env, then ``settings.litmus_url`` in ``litmus.toml``, then ``http://localhost:8000``.
             config_path: Optional path to a ``litmus.toml`` file. If omitted,
                         SDK searches upward from the current working directory.
         """
@@ -83,25 +74,16 @@ class LitmusSDK:
                 print(f"[Litmus] Warning: failed to parse config file '{discovered_config_path}': {exc}")
 
         config_project_id = None
-        config_db_path = None
-        config_chroma_path = None
+        config_litmus_url = None
         if self.local_config:
             config_project_id = self.local_config.project.id
-            # load_config() already resolves these to absolute paths (or None)
-            config_db_path = self.local_config.storage.db_path
-            config_chroma_path = self.local_config.storage.chroma_path
+            config_litmus_url = (self.local_config.settings or {}).get("litmus_url")
 
-        # Default: ~/.litmus/litmus.db — shared between the API server and all
-        # CLI commands regardless of the working directory, so that `litmus watch`
-        # and `api/server.py` always see the same data without any extra config.
-        _default_db = str(Path.home() / ".litmus" / "litmus.db")
-        _default_chroma = str(Path.home() / ".litmus" / "chroma")
-        resolved_db_path = db_path or os.getenv("LITMUS_DB_PATH") or config_db_path or _default_db
-        resolved_chroma_path = chroma_path or os.getenv("LITMUS_CHROMA_PATH") or config_chroma_path or _default_chroma
         resolved_project_id = project_id or os.getenv("LITMUS_PROJECT_ID") or config_project_id or str(_uuid_mod.uuid4())
+        resolved_litmus_url = litmus_url or os.getenv("LITMUS_URL") or config_litmus_url or "http://localhost:8000"
 
-        self.db_path = resolved_db_path
-        self.storage = LitmusStorage(resolved_db_path, chroma_path=resolved_chroma_path)
+        self.litmus_url = resolved_litmus_url
+        self.storage = LitmusStorage(litmus_url=resolved_litmus_url)
         self.project_id: str = resolved_project_id
         self.version: Optional[str] = None
         self._current_run_id: Optional[str] = None
@@ -223,7 +205,7 @@ class LitmusSDK:
         print(
             f"[Litmus] Initialized — project: {self.project_id} "
             f"| version: {active_label} (via {source}) "
-            f"| db: {self.db_path}"
+            f"| api: {self.litmus_url}"
         )
         return self
 

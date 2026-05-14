@@ -53,18 +53,11 @@ def _resolve_model(config: JudgeConfig) -> str:
 
 
 def _sample_output(sdk: "LitmusSDK", test_name: str, version: str) -> str:
-    """Return the most recent non-empty output for a test/version pair."""
-    rows = sdk.storage.conn.execute(
-        """
-        SELECT tr.output FROM test_runs tr
-        LEFT JOIN test_cases tc ON tr.test_id = tc.test_id
-        WHERE tc.name = ? AND tr.version = ? AND tr.output IS NOT NULL AND tr.output != ''
-        ORDER BY tr.timestamp DESC LIMIT 1
-        """,
-        (test_name, version),
-    ).fetchall()
-    if rows:
-        return str(rows[0][0])[:2000]
+    output = sdk.storage.get_latest_test_output(
+        test_name, version, project_id=sdk.project_id
+    )
+    if output:
+        return output[:2000]
     # Fall back to trace response
     traces = sdk.storage.get_traces_by_version(version, project_id=sdk.project_id)
     for t in reversed(traces):
@@ -74,11 +67,7 @@ def _sample_output(sdk: "LitmusSDK", test_name: str, version: str) -> str:
 
 
 def _expected_behavior(sdk: "LitmusSDK", test_name: str) -> str:
-    row = sdk.storage.conn.execute(
-        "SELECT expected_behavior FROM test_cases WHERE name = ? LIMIT 1",
-        (test_name,),
-    ).fetchone()
-    return str(row[0] or "") if row else ""
+    return sdk.storage.get_expected_behavior(test_name, project_id=sdk.project_id)
 
 
 def _call_judge(model: str, prompt: str) -> tuple[str, int, int, float, float]:

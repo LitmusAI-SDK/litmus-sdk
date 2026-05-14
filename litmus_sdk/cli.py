@@ -12,7 +12,7 @@ Commands
 
 Environment
 -----------
-  LITMUS_API_URL    Base URL of the Litmus API server (default: http://localhost:8000)
+  LITMUS_URL        Base URL of the Litmus API server (default: http://localhost:8000)
   OPENAI_API_KEY    Required for LLM calls
   LITMUS_VERSION    Default version label for runs
 """
@@ -49,7 +49,7 @@ from litmus_sdk.config_file import (
 # ---------------------------------------------------------------------------
 
 DEFAULT_API = "http://localhost:8000"
-API_ENV = "LITMUS_API_URL"
+API_ENV = "LITMUS_URL"
 
 
 def _api(ctx_obj: dict) -> str:
