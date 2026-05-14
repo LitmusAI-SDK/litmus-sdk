@@ -146,10 +146,35 @@ def init(ctx: click.Context, name: Optional[str], description: Optional[str], en
 
     project_id = project_id or str(uuid.uuid4())
 
+    # Ask the backend which host-side DB / Chroma paths it's reading from,
+    # so this project writes to the same storage. Falls back to SDK defaults
+    # when the backend can't be reached or wasn't launched via setup.sh.
+    storage_cfg = StorageConfig()
+    try:
+        paths_resp = _get(api_base, "/api/storage/paths")
+        if paths_resp.status_code == 200:
+            paths = paths_resp.json()
+            db = paths.get("db_path")
+            chroma = paths.get("chroma_path")
+            if db:
+                storage_cfg.db_path = db
+            if chroma:
+                storage_cfg.chroma_path = chroma
+            if db or chroma:
+                click.echo(f"  Storage paths discovered from server:")
+                if db:
+                    click.echo(f"    db     : {db}")
+                if chroma:
+                    click.echo(f"    chroma : {chroma}")
+            else:
+                click.echo("  [warn] Server did not advertise storage paths. SDK will use local defaults — runs may not appear on the dashboard.")
+    except requests.exceptions.ConnectionError:
+        pass
+
     config = LitmusProjectConfig(
         project=ProjectConfig(id=project_id, name=name, description=description),
         agent=AgentConfig(entrypoint=entrypoint.strip() or None),
-        storage=StorageConfig(),
+        storage=storage_cfg,
         settings={},
         golden_tests=[],
         runs=[],
