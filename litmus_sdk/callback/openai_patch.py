@@ -118,7 +118,7 @@ def _build_trace(
         cost=0.0,
     )
 
-    sdk.storage.store_trace(trace)
+    sdk.client.store_trace(trace)
 
 
 def apply_patch() -> None:

@@ -6,7 +6,7 @@ Public API surface:
     from litmus_sdk.testing import GoldenTestRunner
     from litmus_sdk.drift import DriftDetector, DriftConfig
     from litmus_sdk.callback import LitmusCallback
-    from litmus_sdk.storage import LitmusStorage
+    from litmus_sdk.client import LitmusClient
     from litmus_sdk.models import LLMTrace, PromptComponents, TestCase, TestResult, TestReport, DriftReport
 """
 
@@ -23,7 +23,7 @@ from litmus_sdk.testing import GoldenTestRunner
 from litmus_sdk.drift import DriftDetector, DriftConfig
 from litmus_sdk.callback import LitmusCallback
 from litmus_sdk.config_file import LitmusProjectConfig, discover_config, load_config, save_config
-from litmus_sdk.storage import LitmusStorage
+from litmus_sdk.client import LitmusClient
 from litmus_sdk.testing.models import LLMTrace, PromptComponents, TestCase, TestResult, TestReport, DriftReport
 
 __all__ = [
@@ -36,7 +36,7 @@ __all__ = [
     "discover_config",
     "load_config",
     "save_config",
-    "LitmusStorage",
+    "LitmusClient",
     "LLMTrace",
     "PromptComponents",
     "TestCase",

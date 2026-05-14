@@ -260,6 +260,6 @@ class DriftDetector:
         # Persist back to DB
         for trace in traces:
             if trace.response_embedding is not None or trace.prompt_embedding is not None:
-                self.sdk.storage.update_embeddings(trace)
+                self.sdk.client.update_embeddings(trace)
 
         return traces

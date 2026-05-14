@@ -77,10 +77,9 @@ class GoldenTestRunner:
         )
         self._test_cases.append(tc)
 
-        # Persist test case definition so the storage layer knows about it
-        storage = self._sdk.storage
-        if storage:
-            storage.store_test_case(
+        client = self._sdk.client
+        if client:
+            client.store_test_case(
                 TestCaseRecord(
                     test_id=tc.test_id,
                     name=tc.name,
@@ -211,7 +210,7 @@ class GoldenTestRunner:
         version: str,
     ) -> List[TestResult]:
         results = []
-        storage = self._sdk.storage
+        client = self._sdk.client
 
         for i in range(1, num_runs + 1):
             # Set run_id BEFORE calling run_function.
@@ -251,8 +250,8 @@ class GoldenTestRunner:
             results.append(result)
 
             # Persist run record — run_id matches what the callback tagged on traces
-            if storage:
-                storage.store_test_result(
+            if client:
+                client.store_test_result(
                     run_id=run_id,
                     version=version,
                     test_id=tc.test_id,

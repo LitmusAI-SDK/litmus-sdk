@@ -32,7 +32,7 @@ from litmus_sdk.callback import LitmusCallback
 from litmus_sdk.callback import openai_patch
 from litmus_sdk.config_file import discover_config, load_config
 from litmus_sdk.testing.models import DriftReport, LLMTrace
-from litmus_sdk.storage import LitmusStorage
+from litmus_sdk.client import LitmusClient
 
 
 class LitmusSDK:
@@ -83,7 +83,7 @@ class LitmusSDK:
         resolved_litmus_url = litmus_url or os.getenv("LITMUS_URL") or config_litmus_url or "http://localhost:8000"
 
         self.litmus_url = resolved_litmus_url
-        self.storage = LitmusStorage(litmus_url=resolved_litmus_url)
+        self.client = LitmusClient(litmus_url=resolved_litmus_url)
         self.project_id: str = resolved_project_id
         self.version: Optional[str] = None
         self._current_run_id: Optional[str] = None
@@ -247,11 +247,11 @@ class LitmusSDK:
         v = version or self.version
         if v is None:
             raise RuntimeError("Call litmus.init(version=...) before get_traces().")
-        return self.storage.get_traces_by_version(v, project_id=self.project_id)
+        return self.client.get_traces_by_version(v, project_id=self.project_id)
 
     def get_versions(self) -> List[str]:
         """Return all version strings present in the database for this project."""
-        return self.storage.get_all_versions(project_id=self.project_id)
+        return self.client.get_all_versions(project_id=self.project_id)
 
     # ------------------------------------------------------------------
     # Drift comparison
@@ -319,4 +319,4 @@ class LitmusSDK:
         # Remove OpenAI SDK patch and deregister this SDK as the active one
         openai_patch._active_sdk = None
         openai_patch.remove_patch()
-        self.storage.close()
+        self.client.close()

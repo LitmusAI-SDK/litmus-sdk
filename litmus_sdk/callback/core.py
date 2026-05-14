@@ -225,7 +225,7 @@ class LitmusCallback(CustomLogger):
                 cost=round(cost, 8),
             )
 
-            self.sdk.storage.store_trace(trace)
+            self.sdk.client.store_trace(trace)
 
         except Exception as exc:
             # Never let a Litmus error surface to the user's application
@@ -267,7 +267,7 @@ class LitmusCallback(CustomLogger):
                 latency_ms=round(latency_ms, 2),
             )
 
-            self.sdk.storage.store_trace(trace)
+            self.sdk.client.store_trace(trace)
 
         except Exception as exc:
             print(f"[Litmus] Failure-capture error (suppressed): {exc}")

@@ -63,7 +63,7 @@ def run_single_test(
         results.append(result)
 
         # Persist to DB
-        sdk.storage.store_test_result(run_id, sdk.version, tc.test_id, result)
+        sdk.client.store_test_result(run_id, sdk.version, tc.test_id, result)
 
         if passed:
             pass_count += 1

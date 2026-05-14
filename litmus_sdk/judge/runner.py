@@ -53,13 +53,13 @@ def _resolve_model(config: JudgeConfig) -> str:
 
 
 def _sample_output(sdk: "LitmusSDK", test_name: str, version: str) -> str:
-    output = sdk.storage.get_latest_test_output(
+    output = sdk.client.get_latest_test_output(
         test_name, version, project_id=sdk.project_id
     )
     if output:
         return output[:2000]
     # Fall back to trace response
-    traces = sdk.storage.get_traces_by_version(version, project_id=sdk.project_id)
+    traces = sdk.client.get_traces_by_version(version, project_id=sdk.project_id)
     for t in reversed(traces):
         if t.response:
             return t.response[:2000]
@@ -67,7 +67,7 @@ def _sample_output(sdk: "LitmusSDK", test_name: str, version: str) -> str:
 
 
 def _expected_behavior(sdk: "LitmusSDK", test_name: str) -> str:
-    return sdk.storage.get_expected_behavior(test_name, project_id=sdk.project_id)
+    return sdk.client.get_expected_behavior(test_name, project_id=sdk.project_id)
 
 
 def _call_judge(model: str, prompt: str) -> tuple[str, int, int, float, float]:
@@ -174,7 +174,7 @@ def run_judge(
         per_test[test_name].judge_verdict = jv
 
         # Persist to DB
-        sdk.storage.store_judge_verdict(version_a, version_b, jv, project_id=sdk.project_id)
+        sdk.client.store_judge_verdict(version_a, version_b, jv, project_id=sdk.project_id)
 
     # Derive a summary verdict
     if not verdicts:
