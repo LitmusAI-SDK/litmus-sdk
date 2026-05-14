@@ -20,11 +20,39 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 import os
 import numpy as np
+import requests
 
 from litmus_sdk.testing.models import LLMTrace, PromptComponents, TestCase, TestResult
 
 from .schema import init_schema
 from .utils import init_chroma, upsert_embedding, fetch_embeddings
+
+
+def _api_url() -> str:
+    return os.getenv("LITMUS_API_URL", "http://localhost:8000").rstrip("/")
+
+
+def _post_or_raise(path: str, payload: Dict[str, Any]) -> None:
+    """
+    POST `payload` to the Litmus backend. Raises RuntimeError with an
+    actionable message on any failure — the SDK must never silently fall
+    back to local SQLite, which is what caused the host/container WAL
+    divergence the previous architecture suffered from.
+    """
+    url = f"{_api_url()}{path}"
+    try:
+        r = requests.post(url, json=payload, timeout=10)
+    except requests.exceptions.ConnectionError as exc:
+        raise RuntimeError(
+            f"Litmus backend unreachable at {url}: {exc}. "
+            "Is the backend running? Try `./start.sh` in litmus-setup."
+        ) from exc
+    if not r.ok:
+        raise RuntimeError(
+            f"Litmus backend rejected write to {path}: "
+            f"{r.status_code} {r.text}. "
+            "Is the backend running and up-to-date with this SDK version?"
+        )
 
 
 class LitmusStorage:
@@ -79,70 +107,27 @@ class LitmusStorage:
 
     def store_trace(self, trace: LLMTrace) -> bool:
         """
-        Persist a single LLMTrace.
+        Persist a single LLMTrace via the backend HTTP API.
 
-        - Metadata → SQLite
-        - Embeddings → ChromaDB (computed eagerly on store so PCA/drift works
-          immediately, without needing a separate drift-comparison trigger)
-
-        Returns True on success.
+        SQLite write + ChromaDB upsert both happen inside the backend — the
+        SDK never opens the shared DB itself. Embeddings are computed
+        locally (best effort) and forwarded in the POST body so the backend
+        can persist them into its in-container Chroma without re-running
+        the embedding model.
         """
         from litmus_sdk.embeddings.utils import batch_compute_embeddings
 
-        d = trace.to_dict()
-
-        # Remove embedding keys — they go to ChromaDB, not SQLite
-        d.pop("prompt_embedding", None)
-        d.pop("response_embedding", None)
-
-        try:
-            # Auto-register the project so it always appears in the UI.
-            # INSERT OR IGNORE means we never overwrite a name the user set via the API.
-            if trace.project_id:
-                self.conn.execute(
-                    """
-                    INSERT OR IGNORE INTO projects (project_id, name, description, agent_url)
-                    VALUES (?, ?, '', '')
-                    """,
-                    (trace.project_id, trace.project_id),
-                )
-
-            self.conn.execute(
-                """
-                INSERT OR REPLACE INTO traces (
-                    trace_id, run_id, version, project_id, timestamp,
-                    system_prompt, user_input, context, final_prompt,
-                    model, temperature, response,
-                    tokens_input, tokens_output, latency_ms, cost,
-                    agent_name, step_number
-                ) VALUES (
-                    :trace_id, :run_id, :version, :project_id, :timestamp,
-                    :system_prompt, :user_input, :context, :final_prompt,
-                    :model, :temperature, :response,
-                    :tokens_input, :tokens_output, :latency_ms, :cost,
-                    :agent_name, :step_number
-                )
-                """,
-                d,
-            )
-            self.conn.commit()
-        except Exception as exc:
-            print(f"[Litmus] Error storing trace metadata {trace.trace_id[:8]}: {exc}")
-            return False
-
-        # --- Compute embeddings eagerly if not already set ---
-        # This ensures PCA and drift work immediately for all trace sources
-        
+        # Best-effort eager embedding computation so PCA / drift work
+        # immediately. Failures are non-fatal — the backend will simply
+        # store None for missing vectors.
         needs_prompt = trace.prompt_embedding is None and bool(trace.prompt_components.final_prompt)
         needs_response = trace.response_embedding is None and bool(trace.response)
-
         if needs_prompt or needs_response:
             texts: list[str] = []
             if needs_prompt:
                 texts.append(trace.prompt_components.final_prompt)
             if needs_response:
                 texts.append(trace.response)
-
             try:
                 vecs = batch_compute_embeddings(texts)
                 idx = 0
@@ -156,21 +141,10 @@ class LitmusStorage:
             except Exception as exc:
                 print(f"[Litmus] Embedding computation failed for {trace.trace_id[:8]}: {exc}")
 
-        # --- Upsert embeddings into ChromaDB ---
-        meta = {"version": trace.version, "run_id": trace.run_id or "", "project_id": trace.project_id or ""}
-        upsert_embedding(
-            self._prompt_col,
-            trace.trace_id,
-            trace.prompt_embedding,
-            trace.prompt_components.final_prompt,
-            meta,
-        )
-        upsert_embedding(
-            self._response_col,
-            trace.trace_id,
-            trace.response_embedding,
-            trace.response,
-            meta,
+        payload = trace.to_dict()  # already serializes embeddings to lists
+        _post_or_raise(
+            f"/api/projects/{trace.project_id}/traces",
+            payload,
         )
         return True
 
@@ -495,38 +469,28 @@ class LitmusStorage:
     ) -> bool:
         from litmus_sdk.embeddings.utils import batch_compute_embeddings
 
-        try:
-            self.conn.execute(
-                """
-                INSERT INTO test_runs
-                    (run_id, version, project_id, test_id, run_number, output, passed,
-                     latency_ms, error, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    run_id,
-                    version,
-                    project_id,
-                    test_id,
-                    result.run_number,
-                    result.output,
-                    1 if result.passed else 0,
-                    result.latency_ms,
-                    result.error,
-                    result.timestamp.isoformat(),
-                ),
-            )
-            self.conn.commit()
-        except Exception as exc:
-            try:
-                self.conn.rollback()
-            except Exception:
-                pass
-            print(f"[Litmus] Error storing test result: {exc}")
-            return False
+        # Persist the row via the backend HTTP API. The backend owns the
+        # shared SQLite file; the SDK must never write to it directly,
+        # because host/container access through a Docker bind mount can't
+        # safely coordinate SQLite WAL state on macOS.
+        _post_or_raise(
+            f"/api/projects/{project_id}/test-runs",
+            {
+                "run_id": run_id,
+                "version": version,
+                "test_id": test_id,
+                "run_number": result.run_number,
+                "output": result.output or "",
+                "passed": bool(result.passed),
+                "latency_ms": float(result.latency_ms or 0.0),
+                "error": result.error,
+                "timestamp": result.timestamp.isoformat(),
+            },
+        )
 
-        # --- Compute embeddings for test run output / prompt eagerly ---
-        # Keyed by run_id so PCA works even when there are no LLM traces.
+        # Embeddings stay local to the SDK's ChromaDB. Single-writer per
+        # process — no WAL bug since Chroma uses its own files in a
+        # directory owned by this process.
         meta = {"version": version, "run_id": run_id, "project_id": project_id or ""}
         texts: list[str] = []
         targets: list[str] = []
@@ -546,9 +510,7 @@ class LitmusStorage:
             except Exception as exc:
                 print(f"[Litmus] Embedding computation failed for test run {run_id}: {exc}")
 
-            return True
-        
-        return False
+        return True
 
     def get_test_results_by_version(self, version: str, project_id: Optional[str] = None) -> List[Dict[str, Any]]:
         if project_id:

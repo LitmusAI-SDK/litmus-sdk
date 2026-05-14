@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="litmus-sdk",
-    version="0.1.5",
+    version="0.2.0",
     description="LLM regression testing via embedding drift",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
