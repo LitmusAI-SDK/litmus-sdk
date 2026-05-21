@@ -37,3 +37,7 @@ litmus --help
 pip install -e ".[dev]"
 pytest tests/
 ```
+
+## License
+
+Released under the [MIT License](LICENSE).

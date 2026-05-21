@@ -6,6 +6,7 @@ setup(
     description="LLM regression testing via embedding drift",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
+    license="MIT",
     python_requires=">=3.9",
     packages=find_packages(exclude=["tests*", "examples*"]),
     install_requires=[
